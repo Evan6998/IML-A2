@@ -1,12 +1,15 @@
 import typing
 from collections import Counter
 import numpy as np
-# import argparse
+import math
+import argparse
 # import matplotlib.pyplot as plt
 
 from numpy.typing import NDArray
 
 type ArrayType = NDArray[typing.Any]
+
+FOLD_NUMBER = 10
 
 
 def euclidean_dist(x1: ArrayType, x2: ArrayType) -> float:
@@ -37,12 +40,24 @@ def manhattan_dist(x1: ArrayType, x2: ArrayType) -> float:
     return np.sum(np.abs(x1 - x2))
 
 
+def predict_all(
+    k: int,
+    dist_metric: typing.Callable[[ArrayType, ArrayType], float],
+    train_data: ArrayType,
+    Xs: ArrayType,
+):
+    def curried_predict(X: ArrayType):
+        return predict(k, dist_metric, train_data, X)
+
+    return np.apply_along_axis(curried_predict, 1, Xs)
+
+
 def predict(
     k: int,
     dist_metric: typing.Callable[[ArrayType, ArrayType], float],
     train_data: ArrayType,
     X: ArrayType,
-):
+) -> int:
     """
     Compute the predictions for the data points in X using a kNN
     classified defined by the first three parameters
@@ -125,6 +140,8 @@ def val_model(
                                      each row will consistent of a single error rate.
     """
 
+    print(f"{train_data.shape=}, {val_data.shape=}")
+
     train_preds: list[ArrayType] = []
     val_preds: list[ArrayType] = []
     train_errs: list[float] = []
@@ -151,7 +168,7 @@ def val_model(
         train_errs.append(train_err)
         val_errs.append(val_err)
 
-    return (train_preds, val_preds, train_errs, val_errs)
+    return (train_preds, val_preds, train_errs, np.array(val_errs))
 
 
 def crossval_model(
@@ -184,45 +201,125 @@ def crossval_model(
                                           corresponding num_folds-fold cross-validation
                                           error rate.
     """
-    # TODO: Implement cross-validation
-    pass
+
+    print(f"{train_data.shape=}")
+
+    step = math.ceil(len(train_data) / num_folds)
+
+    crossval_preds: list[list[ArrayType]] = []
+    crossval_errs: list[ArrayType] = []
+
+    for i in range(num_folds):
+        print(f"\n======================== Fold {i} ========================")
+        val_data = train_data[i * step : (i + 1) * step, :]
+        _train_data = np.concatenate(
+            (train_data[: i * step, :], train_data[(i + 1) * step :, :])
+        )
+        (_, val_preds, _, val_errs) = val_model(ks, dist_metric, _train_data, val_data)
+        # val_preds = (k, n / fold)
+        # val_errs  = (k,  )
+        crossval_preds.append(val_preds)
+        crossval_errs.append(val_errs)
+    preds_result = np.concatenate(tuple(crossval_preds), axis=1)
+    errors_result = np.mean(np.array(crossval_errs), axis=0)
+    print(f"{preds_result.shape=}")
+    print(f"{errors_result.shape=}, \n{errors_result=}")
+    return (preds_result, errors_result)
 
 
 if __name__ == "__main__":
     # This takes care of command line argument parsing for you!
     # To access a specific argument, simply access args.<argument name>.
     # For example, to get the learning rate, you can use `args.learning_rate`.
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument("train_input", type=str, help="path to formatted training data")
-    # parser.add_argument("val_input", type=str, help="path to formatted validation data")
-    # parser.add_argument("test_input", type=str, help="path to formatted test data")
-    # parser.add_argument(
-    #     "val_type",
-    #     type=int,
-    #     choices=[0, 1],
-    #     help="validation type; 0 = validation, 1 = cross-validation",
-    # )
-    # parser.add_argument(
-    #     "dist_metric",
-    #     type=int,
-    #     choices=[0, 1],
-    #     help="distance metric; 0 = Euclidean, 1 = Manhattan",
-    # )
-    # parser.add_argument(
-    #     "min_k", type=int, help="smallest value of k to consider (inclusive)"
-    # )
-    # parser.add_argument(
-    #     "max_k", type=int, help="largest value of k to consider (inclusive)"
-    # )
-    # parser.add_argument(
-    #     "train_out", type=str, help="file to write train predictions to"
-    # )
-    # parser.add_argument("val_out", type=str, help="file to write train predictions to")
-    # parser.add_argument("test_out", type=str, help="file to write test predictions to")
-    # parser.add_argument("metrics_out", type=str, help="file to write metrics to")
-    # args = parser.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("train_input", type=str, help="path to formatted training data")
+    parser.add_argument("val_input", type=str, help="path to formatted validation data")
+    parser.add_argument("test_input", type=str, help="path to formatted test data")
+    parser.add_argument(
+        "val_type",
+        type=int,
+        choices=[0, 1],
+        help="validation type; 0 = validation, 1 = cross-validation",
+    )
+    parser.add_argument(
+        "dist_metric",
+        type=int,
+        choices=[0, 1],
+        help="distance metric; 0 = Euclidean, 1 = Manhattan",
+    )
+    parser.add_argument(
+        "min_k", type=int, help="smallest value of k to consider (inclusive)"
+    )
+    parser.add_argument(
+        "max_k", type=int, help="largest value of k to consider (inclusive)"
+    )
+    parser.add_argument(
+        "train_out", type=str, help="file to write train predictions to"
+    )
+    parser.add_argument("val_out", type=str, help="file to write train predictions to")
+    parser.add_argument("test_out", type=str, help="file to write test predictions to")
+    parser.add_argument("metrics_out", type=str, help="file to write metrics to")
+    args = parser.parse_args()
 
-    train_data = np.genfromtxt("iris_train.csv", delimiter=",", skip_header=1)
-    val_data = np.genfromtxt("iris_val.csv", delimiter=",", skip_header=1)
+    # train_data = np.genfromtxt("iris_train.csv", delimiter=",", skip_header=1)
+    # val_data = np.genfromtxt("iris_val.csv", delimiter=",", skip_header=1)
     # print(predict(5, euclidean_dist, train_data, np.array([5.8,2.7,3.9,1.2])))
-    val_model(range(1, 5), euclidean_dist, train_data, val_data)
+    # val_model(range(1, 5), euclidean_dist, train_data, val_data)
+    # crossval_model(
+    #     range(1, 11), 10, manhattan_dist, np.concatenate((train_data, val_data), axis=0)
+    # )
+
+    dist_metric = euclidean_dist if args.dist_metric == 0 else manhattan_dist
+    train_data = np.genfromtxt(args.train_input, delimiter=",", skip_header=1)
+    val_input = np.genfromtxt(args.val_input, delimiter=",", skip_header=1)
+    test_input = np.genfromtxt(args.test_input, delimiter=",", skip_header=1)
+
+    match args.val_type:
+        case 0:
+            (train_preds, val_preds, train_errs, val_errs) = val_model(
+                range(args.min_k, args.max_k + 1), dist_metric, train_data, val_input
+            )
+
+            with open(args.train_out, "w") as fout:
+                for preds in train_preds:
+                    fout.write(",".join(map(str, list(preds))))
+                    fout.write("\n")
+
+            with open(args.val_out, "w") as fout:
+                for preds in val_preds:
+                    fout.write(",".join(map(str, list(preds))))
+                    fout.write("\n")
+
+            print(f"{val_errs=}")
+            best_k = range(args.min_k, args.max_k + 1)[val_errs.argmin()]
+            predict_labels = predict_all(
+                best_k, dist_metric, train_data, test_input[:, :-1]
+            )
+            print(f"{compute_error(predict_labels, test_input[:, -1])=}")
+
+            with open(args.test_out, "w") as fout:
+                for p in predict_labels:
+                    fout.write(str(p))
+                    fout.write("\n")
+        case _:
+            train_data = np.concatenate((train_data, val_input))
+            (preds_result, errors_result) = crossval_model(
+                range(args.min_k, args.max_k + 1),
+                FOLD_NUMBER,
+                dist_metric,
+                train_data,
+            )
+            best_k: int = range(args.min_k, args.max_k + 1)[errors_result.argmin()] #type: ignore
+            predict_labels = predict_all(
+                best_k, dist_metric, train_data, test_input[:, :-1] #type: ignore
+            )
+            with open(args.val_out, 'w') as fout:
+                for preds in preds_result:
+                    fout.write(",".join(map(str, list(preds))))
+                    fout.write("\n")
+
+            print(f"{compute_error(predict_labels, test_input[:, -1])=}")
+            with open(args.test_out, "w") as fout:
+                for p in predict_labels:
+                    fout.write(str(p))
+                    fout.write("\n")
