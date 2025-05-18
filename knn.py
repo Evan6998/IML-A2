@@ -140,7 +140,7 @@ def val_model(
                                      each row will consistent of a single error rate.
     """
 
-    print(f"{train_data.shape=}, {val_data.shape=}")
+    # print(f"{train_data.shape=}, {val_data.shape=}")
 
     train_preds: list[ArrayType] = []
     val_preds: list[ArrayType] = []
@@ -148,7 +148,7 @@ def val_model(
     val_errs: list[float] = []
 
     for k in ks:
-        print(f"\n{k=}")
+        # print(f"\n{k=}")
 
         def curried_predict(X: ArrayType):
             return predict(k, dist_metric, train_data, X)
@@ -156,12 +156,12 @@ def val_model(
         train_features, train_labels = train_data[:, :-1], train_data[:, -1]
         train_pred = np.apply_along_axis(curried_predict, 1, train_features)
         train_err = compute_error(train_pred, train_labels)
-        print(f"{train_err=}")
+        # print(f"{train_err=}")
 
         validate_features, validate_labels = val_data[:, :-1], val_data[:, -1]
         val_pred = np.apply_along_axis(curried_predict, 1, validate_features)
         val_err = compute_error(val_pred, validate_labels)
-        print(f"{val_err=}")
+        # print(f"{val_err=}")
 
         train_preds.append(train_pred)
         val_preds.append(val_pred)
@@ -202,7 +202,7 @@ def crossval_model(
                                           error rate.
     """
 
-    print(f"{train_data.shape=}")
+    # print(f"{train_data.shape=}")
 
     step = math.ceil(len(train_data) / num_folds)
 
@@ -210,7 +210,7 @@ def crossval_model(
     crossval_errs: list[ArrayType] = []
 
     for i in range(num_folds):
-        print(f"\n======================== Fold {i} ========================")
+        # print(f"\n======================== Fold {i} ========================")
         val_data = train_data[i * step : (i + 1) * step, :]
         _train_data = np.concatenate(
             (train_data[: i * step, :], train_data[(i + 1) * step :, :])
@@ -222,8 +222,8 @@ def crossval_model(
         crossval_errs.append(val_errs)
     preds_result = np.concatenate(tuple(crossval_preds), axis=1)
     errors_result = np.mean(np.array(crossval_errs), axis=0)
-    print(f"{preds_result.shape=}")
-    print(f"{errors_result.shape=}, \n{errors_result=}")
+    # print(f"{preds_result.shape=}")
+    # print(f"{errors_result.shape=}, \n{errors_result=}")
     return (preds_result, errors_result)
 
 
@@ -290,15 +290,26 @@ if __name__ == "__main__":
                     fout.write(",".join(map(str, list(preds))))
                     fout.write("\n")
 
-            print(f"{val_errs=}")
             best_k = range(args.min_k, args.max_k + 1)[val_errs.argmin()]
-            predict_labels = predict_all(
+            predict_labels_only_train = predict_all(
                 best_k, dist_metric, train_data, test_input[:, :-1]
             )
-            print(f"{compute_error(predict_labels, test_input[:, -1])=}")
+            predict_labels_using_train_and_val = predict_all(
+                best_k, dist_metric, np.concatenate((train_data, val_input)), test_input[:, :-1]
+            )
+
+            with open(args.metrics_out, 'w') as fout:
+                for idx, err in enumerate(train_errs):
+                    fout.write(f"k={idx+1} training error rate: {err}\n")
+
+                for idx, err in enumerate(val_errs):
+                    fout.write(f"k={idx+1} validation error rate: {err}\n")
+
+                fout.write(f"test error rate (train): {compute_error(predict_labels_only_train, test_input[:, -1])}\n")
+                fout.write(f"test error rate (train + validation): {compute_error(predict_labels_using_train_and_val, test_input[:, -1])}\n")
 
             with open(args.test_out, "w") as fout:
-                for p in predict_labels:
+                for p in predict_labels_using_train_and_val:
                     fout.write(str(p))
                     fout.write("\n")
         case _:
@@ -318,8 +329,13 @@ if __name__ == "__main__":
                     fout.write(",".join(map(str, list(preds))))
                     fout.write("\n")
 
-            print(f"{compute_error(predict_labels, test_input[:, -1])=}")
             with open(args.test_out, "w") as fout:
                 for p in predict_labels:
                     fout.write(str(p))
                     fout.write("\n")
+
+            with open(args.metrics_out, 'w') as fout:
+                for idx, error in enumerate(errors_result):
+                    fout.write(f"k={idx+1} cross-validation error rate: {error}\n")
+                fout.write(f"test error rate: {compute_error(predict_labels, test_input[:, -1])}\n")
+                
