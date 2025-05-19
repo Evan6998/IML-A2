@@ -114,6 +114,40 @@ def plot_error_vs_k(
     plt.close()  #type: ignore
 
 
+# ----- Plot 10‑fold cross‑validation error vs k (Euclidean vs Manhattan) -----
+def plot_crossval_error_vs_k(
+    ks: typing.Sequence[int],
+    errs_euclid: ArrayType,
+    errs_manhattan: ArrayType,
+    out_file: str = "crossval.png",
+) -> None:
+    """
+    Plot 10‑fold cross‑validation error rate versus k for both Euclidean and
+    Manhattan distance metrics on the iris dataset.
+
+    Parameters
+    ----------
+    ks : Sequence[int]
+        The list (or array) of k values.
+    errs_euclid : np.ndarray
+        Cross‑validation error rates obtained with Euclidean distance.
+    errs_manhattan : np.ndarray
+        Cross‑validation error rates obtained with Manhattan distance.
+    out_file : str, optional
+        File name for the saved figure (default ``crossval.png``).
+    """
+    plt.figure()  # type: ignore
+    plt.plot(ks, errs_euclid, marker="o", label="Euclidean (10‑fold CV)")  # type: ignore
+    plt.plot(ks, errs_manhattan, marker="o", label="Manhattan (10‑fold CV)")  # type: ignore
+    plt.xlabel("k")  # type: ignore
+    plt.ylabel("Cross‑validation error rate")  # type: ignore
+    plt.title("10‑fold CV error rate vs k on iris dataset")  # type: ignore
+    plt.legend()  # type: ignore
+    plt.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)  # type: ignore
+    plt.savefig(out_file, dpi=300, bbox_inches="tight")  # type: ignore
+    plt.close()  # type: ignore
+
+
 def compute_error(preds: ArrayType, labels: ArrayType) -> float:
     """
     Compute the error rate for a given set of predictions
@@ -377,3 +411,25 @@ if __name__ == "__main__":
                 fout.write(
                     f"test error rate: {compute_error(predict_labels, test_input[:, -1])}\n"
                 )
+
+            # ----- Compute 10‑fold CV errors for both metrics and plot -----
+            ks_range = range(args.min_k, args.max_k + 1)
+            # Re‑compute using Euclidean and Manhattan distances
+            (_, errors_euclid) = crossval_model(
+                ks_range,
+                FOLD_NUMBER,
+                euclidean_dist,
+                train_data,
+            )
+            (_, errors_manhattan) = crossval_model(
+                ks_range,
+                FOLD_NUMBER,
+                manhattan_dist,
+                train_data,
+            )
+            plot_crossval_error_vs_k(
+                list(ks_range),
+                errors_euclid,
+                errors_manhattan,
+                "crossval.png",
+            )
