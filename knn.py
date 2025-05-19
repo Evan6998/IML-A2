@@ -3,7 +3,7 @@ from collections import Counter
 import numpy as np
 import math
 import argparse
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 from numpy.typing import NDArray
 
@@ -93,6 +93,25 @@ def most_frequent_elements(labels: list[int]) -> int:
     max_freq = max(count.values())
     candidates = set([elem for elem, freq in count.items() if freq == max_freq])
     return min(candidates)
+
+
+# ----- Plot error‑rate vs k for the iris dataset -----
+def plot_error_vs_k(
+    ks: typing.Sequence[int],
+    train_errs: ArrayType,
+    val_errs: ArrayType,
+    out_file: str = "iris.png",
+) -> None:
+    plt.figure()  #type: ignore
+    plt.plot(ks, train_errs, marker="o", label="Training error")  #type: ignore
+    plt.plot(ks, val_errs, marker="o", label="Validation error")  #type: ignore
+    plt.xlabel("k")  #type: ignore
+    plt.ylabel("Error rate")  #type: ignore
+    plt.title("kNN error rate vs k on iris dataset")  #type: ignore
+    plt.legend()  #type: ignore
+    plt.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)  #type: ignore
+    plt.savefig(out_file, dpi=300, bbox_inches="tight")  #type: ignore
+    plt.close()  #type: ignore
 
 
 def compute_error(preds: ArrayType, labels: ArrayType) -> float:
@@ -295,18 +314,33 @@ if __name__ == "__main__":
                 best_k, dist_metric, train_data, test_input[:, :-1]
             )
             predict_labels_using_train_and_val = predict_all(
-                best_k, dist_metric, np.concatenate((train_data, val_input)), test_input[:, :-1]
+                best_k,
+                dist_metric,
+                np.concatenate((train_data, val_input)),
+                test_input[:, :-1],
             )
 
-            with open(args.metrics_out, 'w') as fout:
+            with open(args.metrics_out, "w") as fout:
                 for idx, err in enumerate(train_errs):
-                    fout.write(f"k={idx+1} training error rate: {err}\n")
+                    fout.write(f"k={idx + 1} training error rate: {err}\n")
 
                 for idx, err in enumerate(val_errs):
-                    fout.write(f"k={idx+1} validation error rate: {err}\n")
+                    fout.write(f"k={idx + 1} validation error rate: {err}\n")
 
-                fout.write(f"test error rate (train): {compute_error(predict_labels_only_train, test_input[:, -1])}\n")
-                fout.write(f"test error rate (train + validation): {compute_error(predict_labels_using_train_and_val, test_input[:, -1])}\n")
+                fout.write(
+                    f"test error rate (train): {compute_error(predict_labels_only_train, test_input[:, -1])}\n"
+                )
+                fout.write(
+                    f"test error rate (train + validation): {compute_error(predict_labels_using_train_and_val, test_input[:, -1])}\n"
+                )
+
+            # ----- Plot error‑rate vs k for the iris dataset -----
+            plot_error_vs_k(
+                list(range(args.min_k, args.max_k + 1)),
+                np.array(train_errs),
+                val_errs,
+                "iris.png",
+            )
 
             with open(args.test_out, "w") as fout:
                 for p in predict_labels_using_train_and_val:
@@ -320,11 +354,14 @@ if __name__ == "__main__":
                 dist_metric,
                 train_data,
             )
-            best_k: int = range(args.min_k, args.max_k + 1)[errors_result.argmin()] #type: ignore
+            best_k: int = range(args.min_k, args.max_k + 1)[errors_result.argmin()]  # type: ignore
             predict_labels = predict_all(
-                best_k, dist_metric, train_data, test_input[:, :-1] #type: ignore
+                best_k, # type: ignore
+                dist_metric,
+                train_data,
+                test_input[:, :-1],  # type: ignore
             )
-            with open(args.val_out, 'w') as fout:
+            with open(args.val_out, "w") as fout:
                 for preds in preds_result:
                     fout.write(",".join(map(str, list(preds))))
                     fout.write("\n")
@@ -334,8 +371,9 @@ if __name__ == "__main__":
                     fout.write(str(p))
                     fout.write("\n")
 
-            with open(args.metrics_out, 'w') as fout:
+            with open(args.metrics_out, "w") as fout:
                 for idx, error in enumerate(errors_result):
-                    fout.write(f"k={idx+1} cross-validation error rate: {error}\n")
-                fout.write(f"test error rate: {compute_error(predict_labels, test_input[:, -1])}\n")
-                
+                    fout.write(f"k={idx + 1} cross-validation error rate: {error}\n")
+                fout.write(
+                    f"test error rate: {compute_error(predict_labels, test_input[:, -1])}\n"
+                )
